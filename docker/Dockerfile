@@ -67,7 +67,7 @@ CMD ["/usr/bin/supervisord", "-c", "/supervisord.conf"]
 FROM ${BASE_IMAGE} as conda
 
 # install conda
-ENV PYTHON_VERSION=${PYTHON_VERSION:-3.10}
+ENV PYTHON_VERSION=${PYTHON_VERSION:-3.12}
 ENV CONDA_DIR=/opt/conda
 ENV PATH="${CONDA_DIR}/bin:${PATH}"
 ARG CONDA_MIRROR=https://repo.anaconda.com/miniconda
@@ -167,15 +167,14 @@ ENV LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:${TRT_OSSPATH}:${TRT_LIBPATH}"
 FROM base as devel
 
 # extra dependencies
-ENV PYTHON_VERSION=${PYTHON_VERSION:-3.10}
+ENV PYTHON_VERSION=${PYTHON_VERSION:-3.12}
 COPY python_requirements.txt debian_requirements.txt /
 RUN apt-get update --fix-missing && \
     cat /debian_requirements.txt | xargs apt-get install -y --no-install-recommends --allow-unauthenticated && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-RUN python3 -m pip install --upgrade pip && \
-    ln -snf /usr/local/bin/pip /usr/bin/pip${PYTHON_VERSION} && \
+RUN ln -snf /usr/local/bin/pip /usr/bin/pip${PYTHON_VERSION} && \
     pip install --no-cache-dir -r /python_requirements.txt
 
 # jupyter lab config
