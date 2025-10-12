@@ -199,16 +199,16 @@ function build_lmdeploy_image() {
 }
 
 
-NGC_VERSION="24.09"
-PYTHON_VERSION="3.10"
-CMAKE_VERSION="3.28.4"
-BAZELISK_VERSION="1.20.0"
+NGC_VERSION="25.09"
+PYTHON_VERSION="3.12"
+CMAKE_VERSION="4.1.2"
+BAZELISK_VERSION="1.27.0"
 USE_JETSON="false"
-DEEPSTREAM_VERSION="6.4-triton-multiarch"
-JETSON_VERSION="r36.4.0"
-PYDS_VERSION="1.1.10"
-LMDEPLOY_VERSION="0.5.0"
-CUSTOM_TRTLLM_BACKEND="true"
+DEEPSTREAM_VERSION="8.0-triton-multiarch"
+JETSON_VERSION="r36.4.4"
+PYDS_VERSION="1.2.2"
+LMDEPLOY_VERSION="0.10.1"
+CUSTOM_TRTLLM_BACKEND="false"
 dos2unix ./*
 
 build_pytorch_image "$NGC_VERSION" "$PYTHON_VERSION" || exit 1
@@ -232,5 +232,5 @@ if [ "$USE_JETSON" = "true" ]; then
 else
   build_deepstream_image "$DEEPSTREAM_VERSION" "$PYTHON_VERSION" "$PYDS_VERSION" "x86_64" || exit 1
 fi
-build_nemo_image 23.08 3.8 || exit 1
-build_lmdeploy_image "$LMDEPLOY_VERSION" "3.8" || exit 1
+build_nemo_image 25.09 3.12 || exit 1
+build_lmdeploy_image "$LMDEPLOY_VERSION" "3.12" || exit 1
