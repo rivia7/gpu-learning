@@ -24,8 +24,8 @@ ARG UPDATE_CUDA_SOURCE=true
 ARG ARCH=x86_64
 RUN if [ "${UPDATE_CUDA_SOURCE}" = "true" ]; then \
         apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/3bf863cc.pub; \
-    fi
-RUN apt-get update --fix-missing && apt-get install --allow-unauthenticated -y \
+    fi && \
+    apt-get update --fix-missing && apt-get install --allow-unauthenticated -y \
     openssh-server pwgen supervisor proxychains redsocks libnfnetlink0 && \
     if [ "${ARCH}" = "aarch64" ]; then \
         iptables_installer="iptables_1.6.0-2ubuntu3_arm64.deb"; \
@@ -46,17 +46,13 @@ RUN apt-get update --fix-missing && apt-get install --allow-unauthenticated -y \
     sed -i "s/.*UsePAM.*/UsePAM no/g" /etc/ssh/sshd_config && \
     sed -i "s/.*PermitRootLogin.*/PermitRootLogin yes/g" /etc/ssh/sshd_config && \
     sed -i "s/.*PasswordAuthentication.*/PasswordAuthentication yes/g" /etc/ssh/sshd_config
-COPY set_root_pw.sh run_ssh.sh /
-RUN chmod +x /*.sh && sed -i -e 's/\r$//' /*.sh
+COPY set_root_pw.sh run_ssh.sh configure_repos.sh /
+COPY proxychains.conf redsocks.conf bashrc /etc/
 ENV AUTHORIZED_KEYS=**None**
 EXPOSE 22
 
-COPY proxychains.conf /etc/proxychains.conf
-COPY redsocks.conf /etc/redsocks.conf
-COPY bashrc /etc/bash.bashrc
-COPY configure_repos.sh /configure_repos.sh
-RUN chmod a+rwx /etc/bash.bashrc && chmod +x /configure_repos.sh
-RUN env | egrep -v "^(LS_COLORS=|SSH_CONNECTION=|USER=|PWD=|HOME=|SSH_CLIENT=|SSH_TTY=|MAIL=|TERM=|SHELL=|SHLVL=|LOGNAME=|PS1=|_=)" > /etc/environment
+RUN chmod +x /*.sh && sed -i -e 's/\r$//' /*.sh && chmod a+rwx /etc/bash.bashrc && chmod +x /configure_repos.sh && \
+    env | egrep -v "^(LS_COLORS=|SSH_CONNECTION=|USER=|PWD=|HOME=|SSH_CLIENT=|SSH_TTY=|MAIL=|TERM=|SHELL=|SHLVL=|LOGNAME=|PS1=|_=)" > /etc/environment
 
 CMD ["/usr/bin/supervisord", "-c", "/supervisord.conf"]
 
@@ -166,19 +162,16 @@ FROM base AS devel
 
 # extra dependencies
 ARG PYTHON_VERSION=3.12
-COPY python_requirements.txt debian_requirements.txt /
+COPY python_requirements.txt debian_requirements.txt run_jupyter.sh /
 RUN apt-get update --fix-missing && \
     cat /debian_requirements.txt | xargs apt-get install -y --no-install-recommends --allow-unauthenticated && \
     apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
-
-RUN ln -snf /usr/local/bin/pip /usr/bin/pip${PYTHON_VERSION} && \
+    rm -rf /var/lib/apt/lists/* && \
+    ln -snf /usr/local/bin/pip /usr/bin/pip${PYTHON_VERSION} && \
     pip install --no-cache-dir -r /python_requirements.txt
 
 # jupyter lab config
-COPY jupyter_server_config.py /root/.jupyter/
-COPY jupyter_notebook_config.py /root/.jupyter/
-COPY run_jupyter.sh /
+COPY jupyter_server_config.py jupyter_notebook_config.py /root/.jupyter/
 RUN chmod +x /run_jupyter.sh && \
     pip install --upgrade requests && \
     pip install --no-cache-dir jupyter_http_over_ws && \
