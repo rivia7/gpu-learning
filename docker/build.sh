@@ -1,6 +1,5 @@
 #!/bin/bash
-WORKING_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-ENABLE_PRUNE="false"
+ENABLE_PRUNE="true"
 
 function docker_prune() {
     if [ "$ENABLE_PRUNE" = "true" ]; then
@@ -52,69 +51,13 @@ function build_tensorrt_image() {
 function build_trtllm_image() {
     local trtllm_version="$1"
     local python_version="$2"
-    local base_image="tensorrt_llm/release:latest"
-    local stage_image="trtllm:devel"
-    rm -rf general/TensorRT-LLM
-    git clone -b "v$trtllm_version" https://github.com/NVIDIA/TensorRT-LLM.git general/TensorRT-LLM
-    cd general/TensorRT-LLM || exit 1
-    git submodule update --init --recursive
-    apt install -y git-lfs && git lfs pull || exit 1
-    docker build --target release --build-arg BUILD_WHEEL_ARGS="--clean --trt_root /usr/local/tensorrt --python_bindings --benchmarks" \
-      --file docker/Dockerfile.multi --tag $base_image . || exit 1
-    cd "$WORKING_DIR" || exit 1
-    docker build --target devel --build-arg BASE_IMAGE="$base_image" --build-arg PYTHON_VERSION="$python_version" \
-      -t $stage_image -f Dockerfile . || exit 1
-    docker build --target tensorrt --build-arg BASE_IMAGE="$stage_image" \
-      -t rivia/tensorrt_llm:"$trtllm_version" -f Dockerfile . || exit 1
-    docker push rivia/tensorrt_llm:"$trtllm_version" && docker_prune
-}
-
-function build_trtllm_backend_from_scratch() {
-    local ngc_version="$1"
-    local trtllm_version="$2"
-    local tensorrt_version="$3"
-    local tritonserver_version="$4"
-    rm -rf general/tensorrtllm_backend
-    rm -rf general/server
-    # 使用`triton-inference-server/tensorrtllm_backend`的指定版本代码
-    git clone -b "$trtllm_version" https://github.com/triton-inference-server/tensorrtllm_backend.git general/tensorrtllm_backend
-    # 使用`triton-inference-server/server`的主分支最新代码
-    git clone -b "$tritonserver_version" https://github.com/triton-inference-server/server.git general/server
-    cd "$WORKING_DIR/general/tensorrtllm_backend" || exit 1
-    git submodule update --init --recursive
-    apt install -y git-lfs && git lfs pull || exit 1
-
-    BASE_IMAGE="nvcr.io/nvidia/pytorch:${ngc_version}-py3"
-    TRT_URL_x86="https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/${tensorrt_version%.*}/tars/TensorRT-${tensorrt_version}.Linux.x86_64-gnu.cuda-12.4.tar.gz"
-    TRT_URL_ARM="https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/${tensorrt_version%.*}/tars/TensorRT-${tensorrt_version}.ubuntu-22.04.aarch64-gnu.cuda-12.4.tar.gz"
-    TRTLLM_BASE_IMAGE=trtllm_base
-    # 使用`TensorRT-LLM`的指定版本代码编译
-    TENSORRTLLM_BACKEND_REPO_TAG="$trtllm_version"
-    docker build -t ${TRTLLM_BASE_IMAGE} \
-                 --build-arg BASE_IMAGE="${BASE_IMAGE}" \
-                 --build-arg TRT_VER="${tensorrt_version}" \
-                 --build-arg RELEASE_URL_TRT_x86="${TRT_URL_x86}" \
-                 --build-arg RELEASE_URL_TRT_ARM="${TRT_URL_ARM}" \
-                 -f dockerfile/Dockerfile.triton.trt_llm_backend . || exit 1
-
-    cd "$WORKING_DIR/general/server" || exit 1
-    python3 ./build.py -v --no-container-interactive --enable-logging --enable-stats --enable-tracing \
-              --enable-metrics --enable-gpu-metrics --enable-cpu-metrics \
-              --filesystem=gcs --filesystem=s3 --filesystem=azure_storage \
-              --endpoint=http --endpoint=grpc --endpoint=sagemaker --endpoint=vertex-ai \
-              --backend=ensemble --enable-gpu --endpoint=http --endpoint=grpc \
-              --no-container-pull \
-              --image="base,${TRTLLM_BASE_IMAGE}" \
-              --backend=tensorrtllm:"${TENSORRTLLM_BACKEND_REPO_TAG}" \
-              --backend=python:"r${ngc_version}" || exit 1
-
+    local base_image="nvcr.io/nvidia/tensorrt-llm/release:$trtllm_version"
     local stage_image="triton_backend:base"
-    local tag="latest-trtllm"
-    docker build --target base --build-arg BASE_IMAGE="tritonserver:latest" \
+    docker build --target base --build-arg BASE_IMAGE="$base_image" \
       -t $stage_image -f Dockerfile . || exit 1
     docker build --target devel --build-arg BASE_IMAGE="$stage_image" --build-arg PYTHON_VERSION="$python_version" \
-      -t rivia/triton_backend:"$tag" -f Dockerfile . || exit 1
-    docker push rivia/triton_backend:"$tag" && docker_prune
+      -t rivia/tensorrt-llm:"$trtllm_version" -f Dockerfile . || exit 1
+    docker push rivia/tensorrt-llm:"$trtllm_version" && docker_prune
 }
 
 function build_triton_backend_image() {
@@ -145,6 +88,7 @@ function build_triton_backend_image() {
 function build_ollama_image() {
     local ollama_version="$1"
     local python_version="$2"
+    local jetson_version="$3"
     local arch="$4"
     if [[ "$arch" == "x86_64" ]]; then
       local base_image="ollama/ollama:$ollama_version"
@@ -208,7 +152,7 @@ DEEPSTREAM_VERSION="8.0-triton-multiarch"
 JETSON_VERSION="r36.4.4"
 PYDS_VERSION="1.2.2"
 LMDEPLOY_VERSION="0.10.1"
-CUSTOM_TRTLLM_BACKEND="false"
+TRTLLM_VERSION="1.2.0rc0.post1"
 dos2unix ./*
 
 build_pytorch_image "$NGC_VERSION" "$PYTHON_VERSION" || exit 1
@@ -218,13 +162,6 @@ build_tensorrt_image "$NGC_VERSION" "$PYTHON_VERSION" "$CMAKE_VERSION" "$BAZELIS
 build_trtllm_image "$TRTLLM_VERSION" "$PYTHON_VERSION" || exit 1
 build_triton_backend_image "$NGC_VERSION" "$PYTHON_VERSION" "general" || exit 1
 build_triton_backend_image "$NGC_VERSION" "$PYTHON_VERSION" "vllm" || exit 1
-if [ "$CUSTOM_TRTLLM_BACKEND" = "true" ]; then
-  # 自构建的会保留编译文件，不会删除, 会多大约 20G 空间
-  TRTLLM_VERSION="rel"
-  TENSORRT_VERSION="10.0.1.6"
-  TRITONSERVER_VERSION="v2.47.0"
-  build_trtllm_backend_from_scratch "$NGC_VERSION" "$TRTLLM_VERSION" "$TENSORRT_VERSION" "$TRITONSERVER_VERSION" || exit 1
-fi
 build_triton_backend_image "$NGC_VERSION" "$PYTHON_VERSION" "$CMAKE_VERSION" "$BAZELISK_VERSION" "trtllm" || exit 1
 if [ "$USE_JETSON" = "true" ]; then
   build_ollama_image "$JETSON_VERSION" "$PYTHON_VERSION" || exit 1
