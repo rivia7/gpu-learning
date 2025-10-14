@@ -71,7 +71,7 @@ ENV PYTHON_VERSION=${PYTHON_VERSION:-3.12}
 ENV CONDA_DIR=/opt/conda
 ENV PATH="${CONDA_DIR}/bin:${PATH}"
 ARG CONDA_MIRROR=https://repo.anaconda.com/miniconda
-ARG CONDA_VERSION=23.11.0-2
+ARG CONDA_VERSION=25.7.0-2
 RUN set -x && \
     # Miniforge installer
     miniforge_arch=$(uname -m) && \
@@ -91,7 +91,7 @@ RUN set -x && \
 FROM ${BASE_IMAGE} as build
 
 # install cmake
-ARG CMAKE_VERSION=3.26.5
+ARG CMAKE_VERSION=4.1.2
 ARG CMAKE_MIRROR=https://github.com/Kitware/CMake/releases/download
 ENV CMAKE_DIR=/usr/local
 RUN set -x && \
@@ -102,7 +102,7 @@ RUN set -x && \
     rm ${cmake_sh}
 
 # install bazelisk
-ARG BAZELISK_VERSION=1.18.0
+ARG BAZELISK_VERSION=1.27.0
 ENV GOPATH=/usr/local/go
 ENV PATH=$PATH:$GOPATH/bin
 RUN apt-get update --fix-missing && \
@@ -124,9 +124,9 @@ FROM ${BASE_IMAGE} as deepstream
 
 # install gst-python and pyds
 ARG ARCH=x86_64
-ARG DEEPSTREAM_VERSION=6.4-triton-multiarch
+ARG DEEPSTREAM_VERSION=8.0-triton-multiarch
 ARG PYDS_MIRROR=https://github.com/NVIDIA-AI-IOT/deepstream_dockers/blob/dev/ds
-ARG PYDS_VERSION=1.1.10
+ARG PYDS_VERSION=1.2.2
 RUN set -x && \
     version="${DEEPSTREAM_VERSION%%-*}" && \
     echo "version=${version}" && \
