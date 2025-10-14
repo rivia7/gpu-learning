@@ -4,8 +4,6 @@ ARG BASE_IMAGE=nvcr.io/nvidia/pytorch:23.12-py3
 # no key arguement for the base image
 FROM ${BASE_IMAGE} as base
 
-MAINTAINER Xiangyang Kan <xiangyangkan@outlook.com>
-
 ENV LANG=C.UTF-8 LC_ALL=C.UTF-8
 
 # Needed for string substitution
@@ -50,7 +48,7 @@ RUN apt-get update --fix-missing && apt-get install --allow-unauthenticated -y \
     sed -i "s/.*PasswordAuthentication.*/PasswordAuthentication yes/g" /etc/ssh/sshd_config
 COPY set_root_pw.sh run_ssh.sh /
 RUN chmod +x /*.sh && sed -i -e 's/\r$//' /*.sh
-ENV AUTHORIZED_KEYS **None**
+ENV AUTHORIZED_KEYS=**None**
 EXPOSE 22
 
 COPY proxychains.conf /etc/proxychains.conf
@@ -167,7 +165,7 @@ ENV LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:${TRT_OSSPATH}:${TRT_LIBPATH}"
 FROM base as devel
 
 # extra dependencies
-ENV PYTHON_VERSION=${PYTHON_VERSION:-3.12}
+ARG PYTHON_VERSION=3.12
 COPY python_requirements.txt debian_requirements.txt /
 RUN apt-get update --fix-missing && \
     cat /debian_requirements.txt | xargs apt-get install -y --no-install-recommends --allow-unauthenticated && \
