@@ -160,8 +160,8 @@ build_tensorflow_image "$NGC_VERSION" "$PYTHON_VERSION" || exit 1
 build_triton_server_image "$NGC_VERSION" || exit 1
 build_tensorrt_image "$NGC_VERSION" "$PYTHON_VERSION" "$CMAKE_VERSION" "$BAZELISK_VERSION" || exit 1
 build_trtllm_image "$TRTLLM_VERSION" "$PYTHON_VERSION" || exit 1
-build_triton_backend_image "$NGC_VERSION" "$PYTHON_VERSION" "general" || exit 1
-build_triton_backend_image "$NGC_VERSION" "$PYTHON_VERSION" "vllm" || exit 1
+build_triton_backend_image "$NGC_VERSION" "$PYTHON_VERSION" "$CMAKE_VERSION" "$BAZELISK_VERSION" "general" || exit 1
+build_triton_backend_image "$NGC_VERSION" "$PYTHON_VERSION" "$CMAKE_VERSION" "$BAZELISK_VERSION" "vllm" || exit 1
 build_triton_backend_image "$NGC_VERSION" "$PYTHON_VERSION" "$CMAKE_VERSION" "$BAZELISK_VERSION" "trtllm" || exit 1
 if [ "$USE_JETSON" = "true" ]; then
   build_ollama_image "$JETSON_VERSION" "$PYTHON_VERSION" || exit 1
