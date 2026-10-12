@@ -2,21 +2,19 @@ ARG BASE_IMAGE=nvcr.io/nvidia/pytorch:23.12-py3
 
 # add sshd support
 # no key arguement for the base image
-FROM ${BASE_IMAGE} AS base
+FROM ${BASE_IMAGE} as base
 
 ENV LANG=C.UTF-8 LC_ALL=C.UTF-8
 
 # Needed for string substitution
 SHELL ["/bin/bash", "-c"]
+USER root
 
-# change timezone
+# change timezone and create the sshd runtime dir
 ARG TZ="Asia/Shanghai"
 RUN ln -snf /usr/share/zoneinfo/${TZ} /etc/localtime && \
-    echo ${TZ} > /etc/timezone
-
-# supervisor config
-RUN mkdir -p /var/run/sshd
-COPY supervisord.conf /
+    echo ${TZ} > /etc/timezone && \
+    mkdir -p /var/run/sshd
 
 # SSH config
 ARG UBUNTU_MIRROR=http://launchpadlibrarian.net
@@ -46,26 +44,29 @@ RUN if [ "${UPDATE_CUDA_SOURCE}" = "true" ]; then \
     sed -i "s/.*UsePAM.*/UsePAM no/g" /etc/ssh/sshd_config && \
     sed -i "s/.*PermitRootLogin.*/PermitRootLogin yes/g" /etc/ssh/sshd_config && \
     sed -i "s/.*PasswordAuthentication.*/PasswordAuthentication yes/g" /etc/ssh/sshd_config
-COPY set_root_pw.sh run_ssh.sh configure_repos.sh /
-COPY proxychains.conf redsocks.conf bashrc /etc/
-ENV AUTHORIZED_KEYS=**None**
+ENV AUTHORIZED_KEYS **None**
 EXPOSE 22
 
-RUN chmod +x /*.sh && sed -i -e 's/\r$//' /*.sh && chmod a+rwx /etc/bash.bashrc && chmod +x /configure_repos.sh && \
+# supervisor, ssh, proxy and bash config
+COPY supervisord.conf set_root_pw.sh run_ssh.sh configure_repos.sh /
+COPY proxychains.conf redsocks.conf /etc/
+COPY bashrc /etc/bash.bashrc
+RUN chmod +x /*.sh && sed -i -e 's/\r$//' /*.sh && \
+    chmod a+rwx /etc/bash.bashrc && \
     env | egrep -v "^(LS_COLORS=|SSH_CONNECTION=|USER=|PWD=|HOME=|SSH_CLIENT=|SSH_TTY=|MAIL=|TERM=|SHELL=|SHLVL=|LOGNAME=|PS1=|_=)" > /etc/environment
 
 CMD ["/usr/bin/supervisord", "-c", "/supervisord.conf"]
 
 # add conda
 # key arguement for the conda image: PYTHON_VERSION, CONDA_VERSION
-FROM ${BASE_IMAGE} AS conda
+FROM ${BASE_IMAGE} as conda
 
 # install conda
 ENV PYTHON_VERSION=${PYTHON_VERSION:-3.12}
 ENV CONDA_DIR=/opt/conda
 ENV PATH="${CONDA_DIR}/bin:${PATH}"
 ARG CONDA_MIRROR=https://repo.anaconda.com/miniconda
-ARG CONDA_VERSION=25.7.0-2
+ARG CONDA_VERSION=26.7.1-1
 RUN set -x && \
     # Miniforge installer
     miniforge_arch=$(uname -m) && \
@@ -82,7 +83,7 @@ RUN set -x && \
 
 # add cmake and bazelisk
 # key arguement for the build image: CMAKE_VERSION, BAZELISK_VERSION
-FROM ${BASE_IMAGE} AS build
+FROM ${BASE_IMAGE} as build
 
 # install cmake
 ARG CMAKE_VERSION=4.1.2
@@ -100,7 +101,7 @@ ARG BAZELISK_VERSION=1.27.0
 ENV GOPATH=/usr/local/go
 ENV PATH=$PATH:$GOPATH/bin
 RUN apt-get update --fix-missing && \
-    apt-get install --no-install-recommends --allow-unauthenticated -y software-properties-common gnupg && \
+    apt-get install --no-install-recommends --allow-unauthenticated -y software-properties-common && \
     add-apt-repository -y ppa:longsleep/golang-backports && \
     apt-get update --fix-missing && \
     apt-get install --no-install-recommends --allow-unauthenticated -y \
@@ -114,7 +115,7 @@ RUN apt-get update --fix-missing && \
 
 # add gst-python, pyds and ffmpeg
 # key arguement for the deepstream image: ARCH, DEEPSTREAM_VERSION, PYDS_VERSION
-FROM ${BASE_IMAGE} AS deepstream
+FROM ${BASE_IMAGE} as deepstream
 
 # install gst-python and pyds
 ARG ARCH=x86_64
@@ -147,7 +148,7 @@ RUN sed -i "s/deb https\:\/\/developer/# deb https\:\/\/developer/g" /etc/apt/so
 
 # set tensorrt library environments
 # no key arguement for the tensorrt image
-FROM ${BASE_IMAGE} AS tensorrt
+FROM ${BASE_IMAGE} as tensorrt
 
 # Set environment and working directory
 # key arguement for the tensorrt image: TRT_LIBPATH, TRT_OSSPATH
@@ -158,20 +159,23 @@ ENV LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:${TRT_OSSPATH}:${TRT_LIBPATH}"
 
 # add extra dependencies and jupyter lab
 # key arguement for the devel image: PYTHON_VERSION
-FROM base AS devel
+FROM base as devel
 
 # extra dependencies
-ARG PYTHON_VERSION=3.12
-COPY python_requirements.txt debian_requirements.txt run_jupyter.sh /
+ENV PYTHON_VERSION=${PYTHON_VERSION:-3.12}
+COPY python_requirements.txt debian_requirements.txt /
 RUN apt-get update --fix-missing && \
     cat /debian_requirements.txt | xargs apt-get install -y --no-install-recommends --allow-unauthenticated && \
     apt-get clean && \
-    rm -rf /var/lib/apt/lists/* && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN python3 -m pip install --upgrade pip && \
     ln -snf /usr/local/bin/pip /usr/bin/pip${PYTHON_VERSION} && \
     pip install --no-cache-dir -r /python_requirements.txt
 
 # jupyter lab config
 COPY jupyter_server_config.py jupyter_notebook_config.py /root/.jupyter/
+COPY run_jupyter.sh /
 RUN chmod +x /run_jupyter.sh && \
     pip install --upgrade requests && \
     pip install --no-cache-dir jupyter_http_over_ws && \
