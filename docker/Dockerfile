@@ -2,7 +2,7 @@ ARG BASE_IMAGE=nvcr.io/nvidia/pytorch:23.12-py3
 
 # add sshd support
 # no key arguement for the base image
-FROM ${BASE_IMAGE} as base
+FROM ${BASE_IMAGE} AS base
 
 ENV LANG=C.UTF-8 LC_ALL=C.UTF-8
 
@@ -44,7 +44,7 @@ RUN if [ "${UPDATE_CUDA_SOURCE}" = "true" ]; then \
     sed -i "s/.*UsePAM.*/UsePAM no/g" /etc/ssh/sshd_config && \
     sed -i "s/.*PermitRootLogin.*/PermitRootLogin yes/g" /etc/ssh/sshd_config && \
     sed -i "s/.*PasswordAuthentication.*/PasswordAuthentication yes/g" /etc/ssh/sshd_config
-ENV AUTHORIZED_KEYS **None**
+ENV AUTHORIZED_KEYS="**None**"
 EXPOSE 22
 
 # supervisor, ssh, proxy and bash config
@@ -59,9 +59,10 @@ CMD ["/usr/bin/supervisord", "-c", "/supervisord.conf"]
 
 # add conda
 # key arguement for the conda image: PYTHON_VERSION, CONDA_VERSION
-FROM ${BASE_IMAGE} as conda
+FROM ${BASE_IMAGE} AS conda
 
 # install conda
+ARG PYTHON_VERSION
 ENV PYTHON_VERSION=${PYTHON_VERSION:-3.12}
 ENV CONDA_DIR=/opt/conda
 ENV PATH="${CONDA_DIR}/bin:${PATH}"
@@ -83,7 +84,7 @@ RUN set -x && \
 
 # add cmake and bazelisk
 # key arguement for the build image: CMAKE_VERSION, BAZELISK_VERSION
-FROM ${BASE_IMAGE} as build
+FROM ${BASE_IMAGE} AS build
 
 # install cmake
 ARG CMAKE_VERSION=4.1.2
@@ -115,7 +116,7 @@ RUN apt-get update --fix-missing && \
 
 # add gst-python, pyds and ffmpeg
 # key arguement for the deepstream image: ARCH, DEEPSTREAM_VERSION, PYDS_VERSION
-FROM ${BASE_IMAGE} as deepstream
+FROM ${BASE_IMAGE} AS deepstream
 
 # install gst-python and pyds
 ARG ARCH=x86_64
@@ -148,10 +149,12 @@ RUN sed -i "s/deb https\:\/\/developer/# deb https\:\/\/developer/g" /etc/apt/so
 
 # set tensorrt library environments
 # no key arguement for the tensorrt image
-FROM ${BASE_IMAGE} as tensorrt
+FROM ${BASE_IMAGE} AS tensorrt
 
 # Set environment and working directory
 # key arguement for the tensorrt image: TRT_LIBPATH, TRT_OSSPATH
+ARG TRT_LIBPATH
+ARG TRT_OSSPATH
 ENV TRT_LIBPATH=${TRT_LIBPATH:-/usr/lib/x86_64-linux-gnu}
 ENV TRT_OSSPATH=${TRT_OSSPATH:-/usr/local/tensorrt/lib}
 ENV PATH="${PATH}:/usr/local/bin/ngc-cli"
@@ -159,9 +162,10 @@ ENV LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:${TRT_OSSPATH}:${TRT_LIBPATH}"
 
 # add extra dependencies and jupyter lab
 # key arguement for the devel image: PYTHON_VERSION
-FROM base as devel
+FROM base AS devel
 
 # extra dependencies
+ARG PYTHON_VERSION
 ENV PYTHON_VERSION=${PYTHON_VERSION:-3.12}
 COPY python_requirements.txt debian_requirements.txt /
 RUN apt-get update --fix-missing && \
