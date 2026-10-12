@@ -85,6 +85,31 @@ function build_triton_backend_image() {
     docker push rivia/triton_backend:"$tag" && docker_prune
 }
 
+function build_dynamo_runtime_image() {
+    local dynamo_version="$1"
+    local python_version="$2"
+    local cmake_version="$3"
+    local bazelisk_version="$4"
+    local runtime_type="$5"
+    local base_image
+    if [[ "$runtime_type" == "sglang" ]]; then
+      base_image="nvcr.io/nvidia/ai-dynamo/sglang-runtime:$dynamo_version"
+      tag="$dynamo_version-sglang"
+    elif [[ "$runtime_type" == "vllm" ]]; then
+      base_image="nvcr.io/nvidia/ai-dynamo/vllm-runtime:$dynamo_version"
+      tag="$dynamo_version-vllm"
+    else
+      base_image="nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:$dynamo_version"
+      tag="$dynamo_version-trtllm"
+    fi
+    local stage_image="dynamo_runtime:base"
+    docker build --target base --build-arg BASE_IMAGE="$base_image" \
+      -t $stage_image -f Dockerfile . || exit 1
+    docker build --target devel --build-arg BASE_IMAGE="$stage_image" --build-arg PYTHON_VERSION="$python_version" \
+      -t rivia/dynamo_runtime:"$tag" -f Dockerfile . || exit 1
+    docker push rivia/dynamo_runtime:"$tag" && docker_prune
+}
+
 function build_ollama_image() {
     local ollama_version="$1"
     local python_version="$2"
@@ -133,15 +158,6 @@ function build_nemo_image() {
     docker push rivia/nemo:"$ngc_version" && docker_prune
 }
 
-function build_lmdeploy_image() {
-    local lmdeploy_version="$1"
-    local python_version="$2"
-    local base_image="openmmlab/lmdeploy:v$lmdeploy_version"
-    docker build --target devel --build-arg BASE_IMAGE="$base_image" --build-arg PYTHON_VERSION="$python_version" \
-      -t "rivia/lmdeploy:v$lmdeploy_version" -f Dockerfile . || exit 1
-    docker push "rivia/lmdeploy:v$lmdeploy_version" && docker_prune
-}
-
 
 NGC_VERSION="26.08"
 PYTHON_VERSION="3.12"
@@ -153,6 +169,7 @@ JETSON_VERSION="r39.2.1"
 PYDS_VERSION="1.2.2"
 LMDEPLOY_VERSION="0.17.0"
 TRTLLM_VERSION="1.3.0rc28"
+DYNAMO_VERSION="1.5.1"
 dos2unix ./*
 
 build_pytorch_image "$NGC_VERSION" "$PYTHON_VERSION" || exit 1
@@ -160,9 +177,15 @@ build_tensorflow_image "$NGC_VERSION" "$PYTHON_VERSION" || exit 1
 build_triton_server_image "$NGC_VERSION" || exit 1
 build_tensorrt_image "$NGC_VERSION" "$PYTHON_VERSION" "$CMAKE_VERSION" "$BAZELISK_VERSION" || exit 1
 build_trtllm_image "$TRTLLM_VERSION" "$PYTHON_VERSION" || exit 1
+
 build_triton_backend_image "$NGC_VERSION" "$PYTHON_VERSION" "$CMAKE_VERSION" "$BAZELISK_VERSION" "general" || exit 1
 build_triton_backend_image "$NGC_VERSION" "$PYTHON_VERSION" "$CMAKE_VERSION" "$BAZELISK_VERSION" "vllm" || exit 1
 build_triton_backend_image "$NGC_VERSION" "$PYTHON_VERSION" "$CMAKE_VERSION" "$BAZELISK_VERSION" "trtllm" || exit 1
+
+build_dynamo_runtime_image "$DYNAMO_VERSION" "$PYTHON_VERSION" "$CMAKE_VERSION" "$BAZELISK_VERSION" "general" || exit 1
+build_dynamo_runtime_image "$DYNAMO_VERSION" "$PYTHON_VERSION" "$CMAKE_VERSION" "$BAZELISK_VERSION" "vllm" || exit 1
+build_dynamo_runtime_image "$DYNAMO_VERSION" "$PYTHON_VERSION" "$CMAKE_VERSION" "$BAZELISK_VERSION" "sglang" || exit 1
+
 if [ "$USE_JETSON" = "true" ]; then
   build_ollama_image "$JETSON_VERSION" "$PYTHON_VERSION" || exit 1
   build_deepstream_image "$JETSON_VERSION" "$PYTHON_VERSION" "$PYDS_VERSION" "jetson" || exit 1
@@ -170,4 +193,3 @@ else
   build_deepstream_image "$DEEPSTREAM_VERSION" "$PYTHON_VERSION" "$PYDS_VERSION" "x86_64" || exit 1
 fi
 build_nemo_image 25.09 3.12 || exit 1
-build_lmdeploy_image "$LMDEPLOY_VERSION" "3.12" || exit 1
