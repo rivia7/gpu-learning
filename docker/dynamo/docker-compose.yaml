@@ -1,0 +1,50 @@
+x-common: &common
+  logging:
+    driver: json-file
+    options:
+      max-size: 100m
+      max-file: "3"
+      tag: '{{.ImageName}}|{{.Name}}|{{.ImageFullID}}|{{.FullID}}'
+  restart: "always"
+  env_file:
+    - .env
+  environment:
+    - NOTEBOOK_USER:user
+    - NVIDIA_VISIBLE_DEVICES:"all"
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
+  working_dir: /root/user
+  volumes:
+    - WORKSPACE/user:/root/user
+    - /etc/localtime:/etc/localtime
+  ulimits:
+    memlock: -1
+    stack: 67108864
+  shm_size: "10gb"
+  cap_add:
+    - NET_ADMIN
+  deploy:
+    resources:
+      reservations:
+        devices:
+          - capabilities: [ gpu ]
+            count: all
+
+services:
+  vllm:
+    <<: *common
+    image: ${DOCKER_DOMAIN}rivia/vllm:${IMAGE_TAG__VLLM:-26.10}
+    hostname: vllm
+    container_name: vllm
+    ports:
+      - 0.0.0.0:${DYNAMO_SSH_PORT:-1022}:22
+      - 0.0.0.0:${DYNAMO_NOTEBOOK_PORT:-8888}:8888
+      - 0.0.0.0:${DYNAMO_EXTRA_PORT_1:-19999}:19999
+      - 0.0.0.0:${DYNAMO_EXTRA_PORT_2:-29999}:29999
+      - 0.0.0.0:${DYNAMO_EXTRA_PORT_3:-39999}:39999
+
+
+networks:
+  default:
+    name: gpu-dynamo
+    driver: bridge
